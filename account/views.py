@@ -6673,6 +6673,14 @@ class ChequeCaseIdRetrieveActiveView(APIView):
         return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
 
 
+class ChequeCaseIdPendingView(APIView):
+    """Retrieve all active ChequeCaseId records with status PENDING."""
+    def get(self, request, *args, **kwargs):
+        queryset = ChequeCaseId.objects.filter(is_active=True, flag=True, status='PENDING').order_by('-id')
+        serializer = ChequeCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+
 class ChequeCaseIdFilterView(APIView):
     """Filter ChequeCaseId records."""
     def post(self, request, *args, **kwargs):
