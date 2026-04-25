@@ -132,4 +132,13 @@ urlpatterns = [
     path('bank-master/restore/',views.RestoreBankMasterView.as_view(), name='restore-bank'),
     path('bank-master/hard-delete/', views.HardDeleteBankMasterView.as_view(), name='hard-delete-bank'),
 
+    path('cheque_case/generateCaseId/', views.GenerateChequeCaseIdNumberView.as_view(), name='generate-cheque-case-id'),
+    path('cheque_case/create/', views.CreateChequeCaseIdView.as_view(), name='create-cheque-case'),
+    path('cheque_case/retrieve/', views.ChequeCaseIdRetrieveView.as_view(), name='retrieve-cheque-case'),
+    path('cheque_case/retrieve_all/', views.ChequeCaseIdRetrieveAllView.as_view(), name='retrieve-all-cheque-case'),
+    path('cheque_case/retrieve_active/', views.ChequeCaseIdRetrieveActiveView.as_view(), name='retrieve-active-cheque-case'),
+    path('cheque_case/filter/', views.ChequeCaseIdFilterView.as_view(), name='filter-cheque-case'),
+    path('cheque_case/update/', views.UpdateChequeCaseIdView.as_view(), name='update-cheque-case'),
+    path('cheque_case/soft-delete/', views.ChequeCaseIdSoftDeleteView.as_view(), name='soft-delete-cheque-case'),
+
 ]

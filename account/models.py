@@ -623,6 +623,54 @@ class CashStatmentBill(models.Model):
     
 
 
+class ChequeCaseId(models.Model):
+    id = models.AutoField(primary_key=True)
+    case_id = models.CharField(max_length=20, unique=True, null=True)
+    date = models.DateField()
+    mr_no = models.ForeignKey(
+        'MoneyReceipt', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cheque_case_ids', to_field='mr_no', db_column='mr_no'
+    )
+    party_name = models.ForeignKey(
+        PartyMaster, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cheque_case_party'
+    )
+    bank_name = models.ForeignKey(
+        'BankMaster', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cheque_case_bank'
+    )
+    cheque_no = models.CharField(max_length=100)
+    cheque_date = models.DateField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    branch_name = models.ForeignKey(
+        BranchMaster, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cheque_case_branch'
+    )
+    status = models.CharField(
+        max_length=50,
+        choices=[('PENDING', 'PENDING'), ('CLEARED', 'CLEARED'), ('BOUNCED', 'BOUNCED')],
+        default='PENDING'
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_DEFAULT, default=1,
+        related_name='cheque_case_created_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cheque_case_updated_by'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    flag = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'cheque_case_id'
+
+    def __str__(self):
+        return f"{self.case_id} - {self.date}"
+
+
 class BankMaster(models.Model):
 
     bank_name = models.CharField(max_length=150)
