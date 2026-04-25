@@ -6562,6 +6562,8 @@ class HardDeleteBankMasterView(APIView):
             "message": "Bank permanently deleted"
         }, status=status.HTTP_200_OK)
 
+_CASE_ID_SEQ_LEN = 5
+
 
 # ========================= CHEQUE CASE ID VIEWS =========================
 
@@ -6583,10 +6585,14 @@ class GenerateChequeCaseIdNumberView(APIView):
             ).exclude(case_id__isnull=True).exclude(case_id__exact='').order_by('-case_id').first()
 
             if last:
-                seq = int(last.case_id[len(prefix):])
-                new_case_id = f"{prefix}{str(seq + 1).zfill(5)}"
+                suffix = last.case_id[len(prefix):]
+                try:
+                    seq = int(suffix)
+                except ValueError:
+                    seq = 0
+                new_case_id = f"{prefix}{str(seq + 1).zfill(_CASE_ID_SEQ_LEN)}"
             else:
-                new_case_id = f"{prefix}00001"
+                new_case_id = f"{prefix}{str(1).zfill(_CASE_ID_SEQ_LEN)}"
 
             return Response({'msg': 'Case ID generated successfully', 'status': 'success',
                              'data': {'case_id': new_case_id}}, status=status.HTTP_200_OK)
@@ -6594,8 +6600,8 @@ class GenerateChequeCaseIdNumberView(APIView):
         except ObjectDoesNotExist:
             return Response({'status': 'error', 'message': 'Branch not found.'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({'status': 'error', 'message': str(e)},
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while generating the Case ID.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -6630,8 +6636,8 @@ class CreateChequeCaseIdView(APIView):
                                 status=status.HTTP_201_CREATED)
             return Response({'status': 'error', 'message': 'Validation failed.', 'errors': serializer.errors},
                             status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'status': 'error', 'message': str(e)},
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while creating the Cheque Case ID.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
 
