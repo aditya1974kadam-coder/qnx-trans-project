@@ -6606,7 +6606,8 @@ class GenerateChequeCaseIdNumberView(APIView):
 
 
 class CreateChequeCaseIdView(APIView):
-    """Create a new ChequeCaseId record (only allowed when MoneyReceipt pay_type is CHECK)."""
+    """Create a new ChequeCaseId record (only allowed when MoneyReceipt pay_type is CHECK).
+    The case_id is generated automatically based on the branch."""
     def post(self, request, *args, **kwargs):
         try:
             mr_no_value = request.data.get('mr_no')
@@ -6627,7 +6628,35 @@ class CreateChequeCaseIdView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            branch_id = request.data.get('branch_name')
+            if not branch_id:
+                return Response({'status': 'error', 'message': 'branch_name is required.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                branch = BranchMaster.objects.get(id=branch_id, is_active=True, flag=True)
+            except BranchMaster.DoesNotExist:
+                return Response({'status': 'error', 'message': 'Branch not found or inactive.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            prefix = branch.branch_code
+            last = ChequeCaseId.objects.filter(
+                branch_name_id=branch_id,
+                case_id__startswith=prefix
+            ).exclude(case_id__isnull=True).exclude(case_id__exact='').order_by('-case_id').first()
+
+            if last:
+                suffix = last.case_id[len(prefix):]
+                try:
+                    seq = int(suffix)
+                except ValueError:
+                    seq = 0
+                generated_case_id = f"{prefix}{str(seq + 1).zfill(_CASE_ID_SEQ_LEN)}"
+            else:
+                generated_case_id = f"{prefix}{str(1).zfill(_CASE_ID_SEQ_LEN)}"
+
             data = request.data.copy()
+            data['case_id'] = generated_case_id
             serializer = ChequeCaseIdSerializer(data=data)
             if serializer.is_valid():
                 cheque_case = serializer.save(created_by=request.user)
