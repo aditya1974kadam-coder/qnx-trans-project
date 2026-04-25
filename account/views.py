@@ -2,8 +2,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from branches.models import BranchMaster
-from .models import GSTMaster,PartyBilling,VoucherReceiptType,VoucherReceiptBranch,MoneyReceipt,VoucherPaymentType,VoucherPaymentBranch,CashBook,BillingSubmission,DeductionReasonType,Deduction,Collection,LocalMemoDelivery,TripMemo
-from .serializers import GSTMasterSerializer,DeductionLRetrieveSerializer,PartyBillingSerializer,VoucherReceiptTypeSerializer,VoucherReceiptBranchSerializer,MoneyReceiptSerializer,VoucherPaymentTypeSerializer,VoucherPaymentBranchSerializer,CashBookSerializer,BillingSubmissionSerializer,DeductionReasonTypeSerializer,DeductionSerializer
+from .models import GSTMaster, ChequeCaseId,PartyBilling,VoucherReceiptType,VoucherReceiptBranch,MoneyReceipt,VoucherPaymentType,VoucherPaymentBranch,CashBook,BillingSubmission,DeductionReasonType,Deduction,Collection,LocalMemoDelivery,TripMemo
+from .serializers import GSTMasterSerializer, ChequeCaseIdSerializer, DeductionLRetrieveSerializer,PartyBillingSerializer,VoucherReceiptTypeSerializer,VoucherReceiptBranchSerializer,MoneyReceiptSerializer,VoucherPaymentTypeSerializer,VoucherPaymentBranchSerializer,CashBookSerializer,BillingSubmissionSerializer,DeductionReasonTypeSerializer,DeductionSerializer
 from django.core.exceptions import ObjectDoesNotExist
 from lr_booking.models import LR_Bokking
 from parties.models import PartyMaster
@@ -6561,3 +6561,279 @@ class HardDeleteBankMasterView(APIView):
         return Response({
             "message": "Bank permanently deleted"
         }, status=status.HTTP_200_OK)
+        
+
+
+
+_CASE_ID_SEQ_LEN = 5
+
+
+# ========================= CHEQUE CASE ID VIEWS =========================
+
+class GenerateChequeCaseIdNumberView(APIView):
+    """Generate the next case_id for a given branch."""
+    def post(self, request, *args, **kwargs):
+        try:
+            branch_id = request.data.get('branch_id')
+            if not branch_id:
+                return Response({'msg': 'branch_id is required', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            branch = BranchMaster.objects.get(id=branch_id, is_active=True, flag=True)
+            prefix = branch.branch_code
+
+            last = ChequeCaseId.objects.filter(
+                branch_name_id=branch_id,
+                case_id__startswith=prefix
+            ).exclude(case_id__isnull=True).exclude(case_id__exact='').order_by('-case_id').first()
+
+            if last:
+                suffix = last.case_id[len(prefix):]
+                try:
+                    seq = int(suffix)
+                except ValueError:
+                    seq = 0
+                new_case_id = f"{prefix}{str(seq + 1).zfill(_CASE_ID_SEQ_LEN)}"
+            else:
+                new_case_id = f"{prefix}{str(1).zfill(_CASE_ID_SEQ_LEN)}"
+
+            return Response({'msg': 'Case ID generated successfully', 'status': 'success',
+                             'data': {'case_id': new_case_id}}, status=status.HTTP_200_OK)
+
+        except ObjectDoesNotExist:
+            return Response({'status': 'error', 'message': 'Branch not found.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while generating the Case ID.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+_CASE_ID_SEQ_LEN = 5
+
+
+# ========================= CHEQUE CASE ID VIEWS =========================
+
+class GenerateChequeCaseIdNumberView(APIView):
+    """Generate the next case_id for a given branch (preview only, does not save)."""
+    def post(self, request, *args, **kwargs):
+        try:
+            branch_id = request.data.get('branch_id')
+            if not branch_id:
+                return Response({'msg': 'branch_id is required', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            branch = BranchMaster.objects.get(id=branch_id, is_active=True, flag=True)
+            prefix = branch.branch_code
+
+            last = ChequeCaseId.objects.filter(
+                branch_name_id=branch_id,
+                case_id__startswith=prefix
+            ).exclude(case_id__isnull=True).exclude(case_id__exact='').order_by('-case_id').first()
+
+            if last:
+                suffix = last.case_id[len(prefix):]
+                try:
+                    seq = int(suffix)
+                except ValueError:
+                    seq = 0
+                new_case_id = f"{prefix}{str(seq + 1).zfill(_CASE_ID_SEQ_LEN)}"
+            else:
+                new_case_id = f"{prefix}{str(1).zfill(_CASE_ID_SEQ_LEN)}"
+
+            return Response({'msg': 'Case ID generated successfully', 'status': 'success',
+                            'data': {'case_id': new_case_id}}, status=status.HTTP_200_OK)
+
+        except ObjectDoesNotExist:
+            return Response({'status': 'error', 'message': 'Branch not found.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while generating the Case ID.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CreateChequeCaseIdView(APIView):
+    """Create a new ChequeCaseId record (only allowed when MoneyReceipt pay_type is CHECK).
+    The case_id is auto-generated from the branch sequence."""
+    def post(self, request, *args, **kwargs):
+        try:
+            mr_no_value = request.data.get('mr_no')
+            if not mr_no_value:
+                return Response({'status': 'error', 'message': 'mr_no is required.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                money_receipt = MoneyReceipt.objects.get(mr_no=mr_no_value, is_active=True, flag=True)
+            except MoneyReceipt.DoesNotExist:
+                return Response({'status': 'error', 'message': 'MoneyReceipt not found or inactive.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            if money_receipt.pay_type != 'CHECK':
+                return Response(
+                    {'status': 'error',
+                    'message': 'ChequeCaseId can only be created for MoneyReceipt with pay_type CHECK.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            branch_id = request.data.get('branch_name')
+            if not branch_id:
+                return Response({'status': 'error', 'message': 'branch_name is required.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                branch = BranchMaster.objects.get(id=branch_id, is_active=True, flag=True)
+            except BranchMaster.DoesNotExist:
+                return Response({'status': 'error', 'message': 'Branch not found or inactive.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            prefix = branch.branch_code
+            last = ChequeCaseId.objects.filter(
+                branch_name_id=branch_id,
+                case_id__startswith=prefix
+            ).exclude(case_id__isnull=True).exclude(case_id__exact='').order_by('-case_id').first()
+
+            if last:
+                suffix = last.case_id[len(prefix):]
+                try:
+                    seq = int(suffix)
+                except ValueError:
+                    seq = 0
+                generated_case_id = f"{prefix}{str(seq + 1).zfill(_CASE_ID_SEQ_LEN)}"
+            else:
+                generated_case_id = f"{prefix}{str(1).zfill(_CASE_ID_SEQ_LEN)}"
+
+            data = request.data.copy()
+            data['case_id'] = generated_case_id
+            serializer = ChequeCaseIdSerializer(data=data)
+            if serializer.is_valid():
+                cheque_case = serializer.save(created_by=request.user)
+                return Response({'status': 'success', 'message': 'Cheque Case ID created successfully.',
+                                'data': ChequeCaseIdSerializer(cheque_case).data},
+                                status=status.HTTP_201_CREATED)
+            return Response({'status': 'error', 'message': 'Validation failed.', 'errors': serializer.errors},
+                            status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while creating the Cheque Case ID.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+
+class ChequeCaseIdRetrieveView(APIView):
+    """Retrieve a single ChequeCaseId by id."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'message': 'id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = ChequeCaseId.objects.get(id=record_id)
+            serializer = ChequeCaseIdSerializer(instance)
+            return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+        except ChequeCaseId.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Record not found.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+
+class ChequeCaseIdRetrieveAllView(APIView):
+    """Retrieve all ChequeCaseId records."""
+    def post(self, request, *args, **kwargs):
+        queryset = ChequeCaseId.objects.all().order_by('-id')
+        serializer = ChequeCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+class ChequeCaseIdRetrieveActiveView(APIView):
+    """Retrieve all active ChequeCaseId records."""
+    def post(self, request, *args, **kwargs):
+        queryset = ChequeCaseId.objects.filter(is_active=True, flag=True).order_by('-id')
+        serializer = ChequeCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+class ChequeCaseIdPendingView(APIView):
+    """Retrieve all active PENDING ChequeCaseId records."""
+    def post(self, request, *args, **kwargs):
+        queryset = ChequeCaseId.objects.filter(is_active=True, flag=True, status='PENDING').order_by('-id')
+        serializer = ChequeCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+class ChequeCaseIdFilterView(APIView):
+    """Filter ChequeCaseId records by arbitrary fields."""
+    def post(self, request, *args, **kwargs):
+        filters = request.data
+        queryset = apply_filters(ChequeCaseId, filters)
+        serializer = ChequeCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+class UpdateChequeCaseIdView(APIView):
+    """Partial update of an existing ChequeCaseId record."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'message': 'id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = ChequeCaseId.objects.get(id=record_id, is_active=True, flag=True)
+        except ChequeCaseId.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Record not found or inactive.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data.copy()
+        serializer = ChequeCaseIdSerializer(instance, data=data, partial=True)
+        if serializer.is_valid():
+            updated = serializer.save(updated_by=request.user)
+            return Response({'status': 'success', 'message': 'Updated successfully.',
+                            'data': ChequeCaseIdSerializer(updated).data}, status=status.HTTP_200_OK)
+        return Response({'status': 'error', 'message': 'Validation failed.', 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResolveChequeCaseIdView(APIView):
+    """Mark a PENDING ChequeCaseId as CLEARED."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'message': 'id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = ChequeCaseId.objects.get(id=record_id, is_active=True, flag=True)
+        except ChequeCaseId.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Record not found or inactive.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        if instance.status == 'CLEARED':
+            return Response({'status': 'error', 'message': 'Case is already cleared.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if instance.status != 'PENDING':
+            return Response(
+                {'status': 'error',
+                'message': f'Cannot clear a case with status "{instance.status}". '
+                            'Only PENDING cases can be marked as CLEARED.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        instance.status = 'CLEARED'
+        instance.updated_by = request.user
+        instance.save()
+        return Response({'status': 'success', 'message': 'Cheque case marked as CLEARED.',
+                        'data': ChequeCaseIdSerializer(instance).data}, status=status.HTTP_200_OK)
+
+
+class ChequeCaseIdSoftDeleteView(APIView):
+    """Soft-delete a ChequeCaseId record (sets is_active=False, flag=False)."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'message': 'id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = ChequeCaseId.objects.get(id=record_id, is_active=True, flag=True)
+            instance.is_active = False
+            instance.flag = False
+            instance.save()
+            return Response({'status': 'success', 'message': 'Record soft-deleted successfully.'},
+                            status=status.HTTP_200_OK)
+        except ChequeCaseId.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Record not found.'},
+                            status=status.HTTP_404_NOT_FOUND)

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import GSTMaster, PartyBilling, CashStatmentLR,VoucherReceiptType, VoucherReceiptBranch,CashStatmentLR, MoneyReceipt,VoucherPaymentBranch,VoucherPaymentType,CashBook,BillingSubmission,DeductionReasonType,Deduction
+from .models import ChequeCaseId, GSTMaster, PartyBilling, CashStatmentLR,VoucherReceiptType, VoucherReceiptBranch, CashStatmentLR, MoneyReceipt,VoucherPaymentBranch,VoucherPaymentType,CashBook,BillingSubmission,DeductionReasonType,Deduction
 from lr_booking.serializers import LRBokkingSerializer
 from vehicals.serializers import VehicalMasterSerializer,DriverMasterSerializer
 from branches.serializers import EmployeeMasterSerializer
@@ -175,3 +175,31 @@ class BankMasterSerializer(serializers.ModelSerializer):
         fields = "__all__"
         
         read_only_fields = ["created_at", "updated_at", "created_by"]
+
+
+class ChequeCaseIdSerializer(serializers.ModelSerializer):
+    mr_no = serializers.SlugRelatedField(
+        queryset=MoneyReceipt.objects.all(),
+        slug_field='mr_no',
+        required=False,
+        allow_null=True
+    )
+
+    class Meta:
+        model = ChequeCaseId
+        fields = '__all__'
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.mr_no:
+            data['mr_no'] = MoneyReceiptSerializer(instance.mr_no).data
+        if instance.party_name:
+            from parties.serializers import PartyMasterSerializer
+            data['party_name'] = PartyMasterSerializer(instance.party_name).data
+        if instance.bank_name:
+            data['bank_name'] = BankMasterSerializer(instance.bank_name).data
+        if instance.branch_name:
+            from branches.serializers import BranchMasterSerializer
+            data['branch_name'] = BranchMasterSerializer(instance.branch_name).data
+        return data
+    
