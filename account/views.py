@@ -6688,7 +6688,7 @@ class ChequeCaseIdRetrieveView(APIView):
 
 class ChequeCaseIdRetrieveAllView(APIView):
     """Retrieve all ChequeCaseId records."""
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         queryset = ChequeCaseId.objects.all().order_by('-id')
         serializer = ChequeCaseIdSerializer(queryset, many=True)
         return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
@@ -6696,7 +6696,7 @@ class ChequeCaseIdRetrieveAllView(APIView):
 
 class ChequeCaseIdRetrieveActiveView(APIView):
     """Retrieve all active ChequeCaseId records."""
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         queryset = ChequeCaseId.objects.filter(is_active=True, flag=True).order_by('-id')
         serializer = ChequeCaseIdSerializer(queryset, many=True)
         return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
@@ -6704,7 +6704,7 @@ class ChequeCaseIdRetrieveActiveView(APIView):
 
 class ChequeCaseIdPendingView(APIView):
     """Retrieve all active ChequeCaseId records with status PENDING."""
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         queryset = ChequeCaseId.objects.filter(is_active=True, flag=True, status='PENDING').order_by('-id')
         serializer = ChequeCaseIdSerializer(queryset, many=True)
         return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
