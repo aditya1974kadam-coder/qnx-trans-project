@@ -16,7 +16,6 @@ class Migration(migrations.Migration):
                     ('PENDING', 'PENDING'),
                     ('CLEARED', 'CLEARED'),
                     ('BOUNCED', 'BOUNCED'),
-                    ('RESOLVED', 'RESOLVED'),
                 ],
                 default='PENDING',
                 max_length=50,
