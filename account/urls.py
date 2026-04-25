@@ -140,5 +140,6 @@ urlpatterns = [
     path('cheque_case/filter/', views.ChequeCaseIdFilterView.as_view(), name='filter-cheque-case'),
     path('cheque_case/update/', views.UpdateChequeCaseIdView.as_view(), name='update-cheque-case'),
     path('cheque_case/soft-delete/', views.ChequeCaseIdSoftDeleteView.as_view(), name='soft-delete-cheque-case'),
+    path('cheque_case/resolve/', views.ResolveChequeCaseIdView.as_view(), name='resolve-cheque-case'),
 
 ]

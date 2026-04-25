@@ -6705,6 +6705,38 @@ class UpdateChequeCaseIdView(APIView):
                         status=status.HTTP_400_BAD_REQUEST)
 
 
+class ResolveChequeCaseIdView(APIView):
+    """Mark a ChequeCaseId as RESOLVED once the cheque amount has been verified and credited."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'message': 'id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = ChequeCaseId.objects.get(id=record_id, is_active=True, flag=True)
+        except ChequeCaseId.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Record not found or inactive.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        if instance.status == 'RESOLVED':
+            return Response({'status': 'error', 'message': 'Case is already resolved.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if instance.status not in ('PENDING', 'CLEARED'):
+            return Response(
+                {'status': 'error',
+                 'message': f'Cannot resolve a case with status "{instance.status}". '
+                             'Only PENDING or CLEARED cases can be resolved.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        instance.status = 'RESOLVED'
+        instance.updated_by = request.user
+        instance.save()
+        return Response({'status': 'success', 'message': 'Cheque case marked as RESOLVED.',
+                         'data': ChequeCaseIdSerializer(instance).data}, status=status.HTTP_200_OK)
+
+
 class ChequeCaseIdSoftDeleteView(APIView):
     """Soft-delete a ChequeCaseId record."""
     def post(self, request, *args, **kwargs):

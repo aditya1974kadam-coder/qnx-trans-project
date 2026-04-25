@@ -648,7 +648,7 @@ class ChequeCaseId(models.Model):
     )
     status = models.CharField(
         max_length=50,
-        choices=[('PENDING', 'PENDING'), ('CLEARED', 'CLEARED'), ('BOUNCED', 'BOUNCED')],
+        choices=[('PENDING', 'PENDING'), ('CLEARED', 'CLEARED'), ('BOUNCED', 'BOUNCED'), ('RESOLVED', 'RESOLVED')],
         default='PENDING'
     )
     created_by = models.ForeignKey(
