@@ -48,7 +48,7 @@ urlpatterns = [
     path('api/routes/', include('routes.urls')),
 
 
-    # path('api/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+#     path('api/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/login/', CustomTokenObtainPairView.as_view(),
          name='token_obtain_pair'),
     path('api/reverify_login/', LoginReverifyAPIView.as_view(),
@@ -73,5 +73,5 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL,
-                          document_root=settings.MEDIA_ROOT)
+     urlpatterns += static(settings.MEDIA_URL,
+                         document_root=settings.MEDIA_ROOT)

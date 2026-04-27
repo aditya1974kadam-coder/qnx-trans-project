@@ -84,7 +84,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'transport_system.middleware.RedirectAdminLoginMiddleware',
     'transport_system.middleware.RefreshSlidingTokenMiddleware',
-  
+    
+
 ]
 
 # CORS_ALLOWED_ORIGINS = [
@@ -149,7 +150,8 @@ REST_FRAMEWORK = {
 # }
 
 SIMPLE_JWT = {
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.SlidingToken',),
+    # 'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.SlidingToken',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),  # Expire after 5 minutes of inactivity
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),  # Maximum lifetime for active sessions is 1 day
 }

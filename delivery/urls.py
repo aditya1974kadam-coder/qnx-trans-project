@@ -64,4 +64,13 @@ urlpatterns = [
     path('VTR/retrieve_all/', views.VehicleProfitRetrieveAllView.as_view()),
     path('VTR/soft-delete/', views.VehicleProfitSoftDeleteAPIView.as_view()),
     
+    
+    path('tur_case/generateCaseId/', views.GenerateTURCaseIdNumberView.as_view(), name='generate_tur_case_id'),
+    path('tur_case/retrieve/', views.TURCaseIdRetrieveView.as_view(), name='tur_case_retrieve'),
+    path('tur_case/retrieve_all/', views.TURCaseIdRetrieveAllView.as_view(), name='tur_case_retrieve_all'),
+    path('tur_case/retrieve_active/', views.TURCaseIdRetrieveActiveView.as_view(), name='tur_case_retrieve_active'),
+    path('tur_case/filter/', views.TURCaseIdFilterView.as_view(), name='tur_case_filter'),
+    path('tur_case/soft-delete/', views.TURCaseIdSoftDeleteAPIView.as_view(), name='tur_case_soft_delete'),
+    path('tur_case/permanent-delete/', views.TURCaseIdPermanentDeleteAPIView.as_view(), name='tur_case_permanent_delete'),
+
 ]

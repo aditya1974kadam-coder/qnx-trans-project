@@ -5,9 +5,9 @@ from rest_framework import status
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ObjectDoesNotExist
-from .models import LR_Bokking,TruckUnloadingReportStatus,TruckUnloadingReportDetails,TruckUnloadingReport,LocalMemoDelivery,DeliveryStatement,CustomerOutstanding,CustomerOutstanding
+from .models import LR_Bokking,TruckUnloadingReportStatus,TruckUnloadingReportDetails,TruckUnloadingReport,LocalMemoDelivery,DeliveryStatement,CustomerOutstanding,CustomerOutstanding, TURCaseId,TUR_OK_STATUS_ID
 from branches.models import BranchMaster
-from .serializers import TruckUnloadingReportStatusSerializer,TruckUnloadingReportDetailsSerializer,TruckUnloadingReportSerializer,LocalMemoDeliverySerializer,DeliveryStatementSerializer,CustomerOutstandingSerializer
+from .serializers import TURCaseIdSerializer, TruckUnloadingReportStatusSerializer,TruckUnloadingReportDetailsSerializer,TruckUnloadingReportSerializer,LocalMemoDeliverySerializer,DeliveryStatementSerializer,CustomerOutstandingSerializer
 from collection.models import BookingMemo, TripMemo
 from rest_framework.exceptions import ValidationError
 from decimal import Decimal
@@ -31,6 +31,24 @@ import os
 from django.conf import settings
 from django.utils import timezone
 from django.http import JsonResponse
+
+_TUR_CASE_ID_SEQ_LEN = 5
+
+def _generate_tur_case_id_for_branch(branch):
+    """Return the next TURCaseId string for the given BranchMaster instance (not saved yet)."""
+    prefix = branch.branch_code
+    last = TURCaseId.objects.filter(
+        branch_name=branch,
+        case_id__startswith=prefix
+    ).exclude(case_id__isnull=True).exclude(case_id__exact='').order_by('-case_id').first()
+    if last:
+        suffix = last.case_id[len(prefix):]
+        try:
+            seq = int(suffix)
+        except ValueError:
+            seq = 0
+        return f"{prefix}{str(seq + 1).zfill(_TUR_CASE_ID_SEQ_LEN)}"
+    return f"{prefix}{str(1).zfill(_TUR_CASE_ID_SEQ_LEN)}"
 
 
 class TURStatusCreateView(APIView):
@@ -549,13 +567,28 @@ class TURCreateView(APIView):
                         lr_booking.save()
 
                     # Check if status is not "OK"                  
-                    if tur_detail.status_id != 1:
+                    # if tur_detail.status_id != 1:
+                    if tur_detail.status_id != TUR_OK_STATUS_ID:
                         not_ok_found = True
                         # Add branch emails to the recipient list
                         if lr_booking.from_branch.email_id:                       
                             email_recipients.add(lr_booking.from_branch.email_id.strip())
                         if lr_booking.to_branch.email_id:                        
                             email_recipients.add(lr_booking.to_branch.email_id.strip())
+                        
+                        # Auto-generate a TURCaseId for this negative-status detail
+                        new_case_id = _generate_tur_case_id_for_branch(branch)
+                        TURCaseId.objects.create(
+                            case_id=new_case_id,
+                            date=data['date'],
+                            tur=tur,
+                            tur_detail=tur_detail,
+                            lr_booking=lr_booking,
+                            branch_name=branch,
+                            tur_status=tur_detail.status,
+                            remark=tur_detail.remark or '',
+                            created_by=request.user
+                        )
 
                     tur.tur_details.add(tur_detail)
                     
@@ -845,8 +878,11 @@ class TURUpdateAPIView(APIView):
                 if tur_details:
                     # Delete existing TruckUnloadingReportDetails related to this TUR
                     TruckUnloadingReportDetails.objects.filter(truckunloadingreport=tur).delete()
-                    # Clear existing tur_details
+                    # Clear existing 
+                    # Clear existing tur_details and associated case IDs
                     tur.tur_details.clear()
+                    TURCaseId.objects.filter(tur=tur).delete()
+                    
 
                     for detail in tur_details:
                         lr_booking_id = detail.get('lr_booking')
@@ -881,6 +917,22 @@ class TURUpdateAPIView(APIView):
                         if tur_detail.okpackage > 0:
                             lr_booking.okpackage = tur_detail.okpackage
                             lr_booking.save()
+                            
+                        # Auto-generate a TURCaseId for any negative-status detail
+                        if tur_detail.status_id != TUR_OK_STATUS_ID:
+                            new_case_id = _generate_tur_case_id_for_branch(branch)
+                            TURCaseId.objects.create(
+                                case_id=new_case_id,
+                                date=data.get('date', tur.date),
+                                tur=tur,
+                                tur_detail=tur_detail,
+                                lr_booking=lr_booking,
+                                branch_name=branch,
+                                tur_status=tur_detail.status,
+                                remark=tur_detail.remark or '',
+                                created_by=request.user
+                            )
+
                             
                         tur.tur_details.add(tur_detail)
 
@@ -3423,3 +3475,113 @@ class VehicleProfitSoftDeleteAPIView(APIView):
 
 
 # //////////////////////////////////////////////////////////////////////////////////////
+# ========================= TUR CASE ID VIEWS =========================
+class GenerateTURCaseIdNumberView(APIView):
+    """Preview the next TURCaseId for a given branch (does not save)."""
+    def post(self, request, *args, **kwargs):
+        try:
+            branch_id = request.data.get('branch_id')
+            if not branch_id:
+                return Response({'msg': 'branch_id is required', 'status': 'error'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            branch = BranchMaster.objects.get(id=branch_id, is_active=True, flag=True)
+            new_case_id = _generate_tur_case_id_for_branch(branch)
+            return Response({'msg': 'TUR Case ID generated successfully', 'status': 'success',
+                            'data': {'case_id': new_case_id}}, status=status.HTTP_200_OK)
+        except BranchMaster.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Branch not found or inactive.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while generating the Case ID.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TURCaseIdRetrieveView(APIView):
+    """Retrieve a single TURCaseId by id."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'msg': 'id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = TURCaseId.objects.get(id=record_id)
+            serializer = TURCaseIdSerializer(instance)
+            return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+        except TURCaseId.DoesNotExist:
+            return Response({'status': 'error', 'msg': 'TURCaseId record not found.'},
+                            status=status.HTTP_404_NOT_FOUND)
+            
+            
+class TURCaseIdRetrieveAllView(APIView):
+    """Retrieve all TURCaseId records."""
+    def post(self, request, *args, **kwargs):
+        queryset = TURCaseId.objects.all().order_by('-id')
+        serializer = TURCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+    
+
+class TURCaseIdRetrieveActiveView(APIView):
+    """Retrieve all active TURCaseId records."""
+    def post(self, request, *args, **kwargs):
+        queryset = TURCaseId.objects.filter(is_active=True, flag=True).order_by('-id')
+        serializer = TURCaseIdSerializer(queryset, many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+    
+
+class TURCaseIdFilterView(APIView):
+    """Filter TURCaseId records by branch, TUR, LR, or status."""
+    def post(self, request, *args, **kwargs):
+        queryset = TURCaseId.objects.filter(is_active=True, flag=True)
+        branch_id = request.data.get('branch_id')
+        tur_id = request.data.get('tur_id')
+        lr_booking_id = request.data.get('lr_booking_id')
+        tur_status_id = request.data.get('tur_status_id')
+        case_id = request.data.get('case_id')
+        if branch_id:
+            queryset = queryset.filter(branch_name_id=branch_id)
+        if tur_id:
+            queryset = queryset.filter(tur_id=tur_id)
+        if lr_booking_id:
+            queryset = queryset.filter(lr_booking_id=lr_booking_id)
+        if tur_status_id:
+            queryset = queryset.filter(tur_status_id=tur_status_id)
+        if case_id:
+            queryset = queryset.filter(case_id__icontains=case_id)
+        serializer = TURCaseIdSerializer(queryset.order_by('-id'), many=True)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+    
+
+class TURCaseIdSoftDeleteAPIView(APIView):
+    """Soft-delete a TURCaseId by setting flag=False."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'msg': 'ID is required', 'status': 'error'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = TURCaseId.objects.get(pk=record_id)
+            instance.flag = False
+            instance.save()
+            return Response({'msg': 'TURCaseId deactivated (soft deleted) successfully',
+                            'status': 'success'}, status=status.HTTP_200_OK)
+        except TURCaseId.DoesNotExist:
+            return Response({'msg': 'TURCaseId not found', 'status': 'error'},
+                            status=status.HTTP_404_NOT_FOUND)
+            
+
+
+class TURCaseIdPermanentDeleteAPIView(APIView):
+    """Permanently delete a TURCaseId record."""
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'msg': 'ID is required', 'status': 'error'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            instance = TURCaseId.objects.get(pk=record_id)
+            instance.delete()
+            return Response({'msg': 'TURCaseId permanently deleted successfully',
+                                'status': 'success'}, status=status.HTTP_200_OK)
+        except TURCaseId.DoesNotExist:
+            return Response({'msg': 'TURCaseId not found', 'status': 'error'},
+                            status=status.HTTP_404_NOT_FOUND)

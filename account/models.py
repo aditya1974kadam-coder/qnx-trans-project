@@ -662,7 +662,10 @@ class ChequeCaseId(models.Model):
     )
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-    flag = models.BooleanField(default=True)    
+    flag = models.BooleanField(default=True) 
+    
+    
+    
 class BankMaster(models.Model):
 
     bank_name = models.CharField(max_length=150)

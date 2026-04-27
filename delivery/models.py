@@ -175,6 +175,49 @@ class CustomerOutstanding(models.Model):
 from django.db import models
 
 
+# Negative TUR statuses trigger case_id generation (any status whose id != TUR_OK_STATUS_ID)
+TUR_OK_STATUS_ID = 1
+class TURCaseId(models.Model):
+    id = models.AutoField(primary_key=True)
+    case_id = models.CharField(max_length=20, unique=True, null=True)
+    date = models.DateField()
+    tur = models.ForeignKey(
+        TruckUnloadingReport, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tur_cases'
+    )
+    tur_detail = models.ForeignKey(
+        TruckUnloadingReportDetails, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tur_detail_cases'
+    )
+    lr_booking = models.ForeignKey(
+        LR_Bokking, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='lr_tur_cases'
+    )
+    branch_name = models.ForeignKey(
+        BranchMaster, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tur_case_branch'
+    )
+    tur_status = models.ForeignKey(
+        TruckUnloadingReportStatus, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tur_case_status'
+    )
+    remark = models.CharField(max_length=255, blank=True, null=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_DEFAULT, default=1, related_name='tur_case_created_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tur_case_updated_by'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    flag = models.BooleanField(default=True)
+    class Meta:
+        db_table = 'tur_case_id'
+    def __str__(self):
+        return f"{self.case_id} - {self.tur_status}"
+
+
 
 class VehicleExpense(models.Model):
 
