@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from lr_booking.serializers import LRBokkingSerializer
-from .models import TruckUnloadingReportStatus,TruckUnloadingReportDetails,TruckUnloadingReport, LocalMemoDelivery, DeliveryStatement,CustomerOutstanding
+from .models import TruckUnloadingReportStatus,TruckUnloadingReportDetails,TruckUnloadingReport, LocalMemoDelivery, DeliveryStatement,CustomerOutstanding,TURCaseId
 from collection.serializers import BookingMemoSerializer
 
 class TruckUnloadingReportStatusSerializer(serializers.ModelSerializer):
@@ -64,3 +64,13 @@ class VehicleProfitSerializer(serializers.ModelSerializer):
     class Meta:
         model = VehicleProfit
         fields = "__all__"
+
+
+class TURCaseIdSerializer(serializers.ModelSerializer):
+    tur_status = TruckUnloadingReportStatusSerializer(read_only=True)
+    created_by = serializers.StringRelatedField()
+    updated_by = serializers.StringRelatedField()
+
+    class Meta:
+        model = TURCaseId
+        fields = '__all__'
