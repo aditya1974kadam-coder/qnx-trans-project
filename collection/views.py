@@ -3236,6 +3236,31 @@ class TripMemoCreateView(APIView):
                 "status": "error"
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # Block if the selected vehicle is already on an active trip
+        try:
+            selected_vehicle = VehicalMaster.objects.get(pk=vehicle_no, is_active=True, flag=True)
+            if not selected_vehicle.is_available:
+                open_trip = TripMemo.objects.filter(
+                    vehicle_no=selected_vehicle,
+                    trip_mode='OPEN',
+                    is_active=True,
+                    flag=True
+                ).first()
+                if open_trip:
+                    return Response({
+                        "message": f"Vehicle {selected_vehicle.vehical_number} is already assigned to Trip {open_trip.trip_no}. It cannot be assigned again until that trip is closed.",
+                        "status": "error"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({
+                    "message": f"Vehicle {selected_vehicle.vehical_number} is currently unavailable.",
+                    "status": "error"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except VehicalMaster.DoesNotExist:
+            return Response({
+                "message": "Selected vehicle not found or inactive.",
+                "status": "error"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         # Validate booking memos
         invalid_memos = []
         for item in booking_memos_data:
@@ -3507,8 +3532,9 @@ class TripMemoUpdateView(APIView):
                 # Save the updated instance
                 trip_memo_instance = trip_memo_serializer.save(updated_by=request.user)
 
-                # Compare old and new vehicle_no and driver_name to update availability
-                if old_vehicle_no != vehicle_no:
+                # Compare old and new vehicle_no using the FK id to avoid object-vs-int mismatch
+                old_vehicle_id = old_vehicle_no.id if old_vehicle_no else None
+                if old_vehicle_id != int(vehicle_no):
                     if old_vehicle_no:
                         old_vehicle_no.is_available = True
                         old_vehicle_no.save()
@@ -3823,6 +3849,11 @@ class TripMemoSoftDeleteAPIView(APIView):
             # Retrieve the TripMemo instance
             instance = TripMemo.objects.get(pk=trip_memo_id)
 
+            # Release the vehicle if the trip was still open
+            if instance.trip_mode == 'OPEN' and instance.vehicle_no:
+                instance.vehicle_no.is_available = True
+                instance.vehicle_no.save()
+
             # Set is_active to False to soft delete
             instance.flag = False
             instance.save()
@@ -3855,6 +3886,11 @@ class TripMemoPermanentDeleteAPIView(APIView):
         try:
             # Retrieve the TripMemo instance
             instance = TripMemo.objects.get(pk=trip_memo_id)
+
+            # Release the vehicle if the trip was still open
+            if instance.trip_mode == 'OPEN' and instance.vehicle_no:
+                instance.vehicle_no.is_available = True
+                instance.vehicle_no.save()
 
             # Permanently delete the instance
             instance.delete()

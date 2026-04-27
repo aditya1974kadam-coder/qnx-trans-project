@@ -871,8 +871,8 @@ class VehicalMasterListAPIView(APIView):
 class VehicalMasterActiveListAPIView(APIView):
     def post(self, request, *args, **kwargs):
         try:
-            # Retrieve instances of VehicalMaster where is_active is True
-            queryset = VehicalMaster.objects.filter(is_active=True,flag=True).order_by('-id')
+            # Retrieve instances of VehicalMaster where is_active is True and vehicle is not currently on a trip
+            queryset = VehicalMaster.objects.filter(is_active=True, flag=True, is_available=True).order_by('-id')
             serializer = VehicalMasterSerializer(queryset, many=True, context={'request': request})
             
             response_data = {
