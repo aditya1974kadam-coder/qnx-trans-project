@@ -3488,9 +3488,8 @@ class GenerateTURCaseIdNumberView(APIView):
         except BranchMaster.DoesNotExist:
             return Response({'status': 'error', 'message': 'Branch not found or inactive.'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({'status': 'error', 'message': 'An error occurred while generating the Case ID.',
-                             'error': str(e)},
+        except Exception:
+            return Response({'status': 'error', 'message': 'An error occurred while generating the Case ID.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
