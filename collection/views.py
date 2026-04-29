@@ -3235,6 +3235,33 @@ class TripMemoCreateView(APIView):
                 "message": "from_branch, vehicle_no, and driver_name are required fields.",
                 "status": "error"
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Block if the selected driver is already on an active trip
+        try:
+            selected_driver = DriverMaster.objects.get(pk=driver_name, is_active=True, flag=True)
+            if not selected_driver.is_available:
+                open_trip = TripMemo.objects.filter(
+                    driver_name=selected_driver,
+                    trip_mode='OPEN',
+                    is_active=True,
+                    flag=True
+                ).first()
+                if open_trip:
+                    return Response({
+                        "message": f"Driver {selected_driver.driver_name} is already assigned to Trip {open_trip.trip_no}. They cannot be assigned again until that trip is closed.",
+                        "status": "error"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({
+                    "message": f"Driver {selected_driver.driver_name} is currently unavailable.",
+                    "status": "error"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except DriverMaster.DoesNotExist:
+            return Response({
+                "message": "Selected driver not found or inactive.",
+                "status": "error"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate booking memos
 
         # Validate booking memos
         invalid_memos = []
@@ -3261,6 +3288,8 @@ class TripMemoCreateView(APIView):
                     "id": booking_memo_id,
                     "error": "This booking memos's vehicle_no does not match the trip's vehicle_no."
                 })
+            
+            
             # if booking_memo_instance.driver_name_id != driver_name:
             #     invalid_memos.append({
             #         "id": booking_memo_id,
@@ -3341,9 +3370,9 @@ class TripMemoCreateView(APIView):
                         trip_memo_instance.vehicle_no.is_available = False
                         trip_memo_instance.vehicle_no.save()
 
-                    # if trip_memo_instance.driver_name:
-                    #     trip_memo_instance.driver_name.is_available = False
-                    #     trip_memo_instance.driver_name.save()
+                    if trip_memo_instance.driver_name:
+                        trip_memo_instance.driver_name.is_available = False
+                        trip_memo_instance.driver_name.save()
 
                     # Serialize the saved TripMemo instance
                     response_serializer = TripMemoSerializer(trip_memo_instance)
@@ -3518,17 +3547,18 @@ class TripMemoUpdateView(APIView):
                     new_vehicle_instance.is_available = False
                     new_vehicle_instance.save()
 
-                # if old_driver_name != driver_name:
-                #     if old_driver_name:
-                #         old_driver_name.is_available = True
-                #         old_driver_name.save()
+                old_driver_id = old_driver_name.id if old_driver_name else None
+                if old_driver_id != int(driver_name):
+                    if old_driver_name:
+                        old_driver_name.is_available = True
+                        old_driver_name.save()
 
-                #     # Set new driver_name to unavailable
-                #     new_driver_instance = get_object_or_404(DriverMaster, pk=driver_name)
-                #     new_driver_instance.is_available = False
-                #     new_driver_instance.save()
+                    # Set new driver_name to unavailable
+                    new_driver_instance = get_object_or_404(DriverMaster, pk=driver_name)
+                    new_driver_instance.is_available = False
+                    new_driver_instance.save()
 
-               
+
                 if booking_memos_data is not None:                    
                     # Fetch existing booking memos linked to the instance
                     existing_booking_memos = list(trip_memo_instance.booking_memos.all())
@@ -3822,6 +3852,14 @@ class TripMemoSoftDeleteAPIView(APIView):
         try:
             # Retrieve the TripMemo instance
             instance = TripMemo.objects.get(pk=trip_memo_id)
+            # Release the vehicle and driver if the trip was still open
+            if instance.trip_mode == 'OPEN':
+                if instance.vehicle_no:
+                    instance.vehicle_no.is_available = True
+                    instance.vehicle_no.save()
+                if instance.driver_name:
+                    instance.driver_name.is_available = True
+                    instance.driver_name.save()
 
             # Set is_active to False to soft delete
             instance.flag = False
@@ -3855,6 +3893,16 @@ class TripMemoPermanentDeleteAPIView(APIView):
         try:
             # Retrieve the TripMemo instance
             instance = TripMemo.objects.get(pk=trip_memo_id)
+            
+            # Release the vehicle and driver if the trip was still open
+            if instance.trip_mode == 'OPEN':
+                if instance.vehicle_no:
+                    instance.vehicle_no.is_available = True
+                    instance.vehicle_no.save()
+                if instance.driver_name:
+                    instance.driver_name.is_available = True
+                    instance.driver_name.save()
+
 
             # Permanently delete the instance
             instance.delete()
