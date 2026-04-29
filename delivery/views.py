@@ -602,9 +602,9 @@ class TURCreateView(APIView):
                         trip_memo.vehicle_no.is_available = True
                         trip_memo.vehicle_no.save()
 
-                    # if trip_memo.driver_name:
-                    #     trip_memo.driver_name.is_available = True
-                    #     trip_memo.driver_name.save()
+                    if trip_memo.driver_name:
+                        trip_memo.driver_name.is_available = True
+                        trip_memo.driver_name.save()
 
                 # Serialize and return the created TUR
 
@@ -943,9 +943,9 @@ class TURUpdateAPIView(APIView):
                             trip_memo.vehicle_no.is_available = True
                             trip_memo.vehicle_no.save()
 
-                        # if trip_memo.driver_name:
-                        #     trip_memo.driver_name.is_available = True
-                        #     trip_memo.driver_name.save()
+                        if trip_memo.driver_name:
+                            trip_memo.driver_name.is_available = True
+                            trip_memo.driver_name.save()
 
                 # Serialize and return the updated TUR
                 serializer = TruckUnloadingReportSerializer(tur)

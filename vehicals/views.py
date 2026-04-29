@@ -1211,8 +1211,7 @@ class DriverMasterActiveListAPIView(APIView):
     def post(self, request, *args, **kwargs):
         try:
             # Retrieve all active instances of DriverMaster
-            # queryset = DriverMaster.objects.filter(is_available=True,is_active=True,flag=True).order_by('-id')
-            queryset = DriverMaster.objects.filter(is_active=True,flag=True).order_by('-id')
+            queryset = DriverMaster.objects.filter(is_available=True,is_active=True,flag=True).order_by('-id')
             serializer = DriverMasterSerializer(queryset, many=True)
             
             response_data = {
