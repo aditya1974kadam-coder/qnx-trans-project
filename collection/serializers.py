@@ -5,7 +5,11 @@ from destinations.models import DestinationMaster
 from lr_booking.models import LR_Bokking
 from lr_booking.serializers import LRBokkingSerializer
 from vehicals.models import DriverMaster, VehicalMaster, VehicalTypes
-from .models import  BookingMemo, BookingMemoLRs, Collection,TripBokkingMemos,TripMemo,TripMode,VehicalHireContract,BrokerMasterTrips,BrokerMaster
+from .models import (
+    BookingMemo, BookingMemoLRs, Collection, TripBokkingMemos, TripMemo,
+    TripMode, VehicalHireContract, BrokerMasterTrips, BrokerMaster,
+    VehicleParkDispatch,
+)
 
 class CollectionSerializer(serializers.ModelSerializer):
     # lr_booking = serializers.PrimaryKeyRelatedField(queryset=LR_Bokking.objects.all(), many=True)
@@ -36,7 +40,8 @@ class BookingMemoLRsSerializer(serializers.ModelSerializer):
     class Meta:
         model = BookingMemoLRs
         fields = [
-            'id', 'lr_booking', 'coll_point', 'del_point', 'lr_remarks', 
+            'id', 'lr_booking', 'coll_point', 'del_point', 'lr_remarks',
+            'drop_at_branch',
             'created_by', 'created_at', 'updated_by', 'updated_at', 'is_active'
         ]
 
@@ -143,3 +148,21 @@ class BrokerMasterSerializer(serializers.ModelSerializer):
     class Meta:
         model = BrokerMaster
         fields = '__all__'
+
+
+# ---------------------------------------------------------------------------
+# Park-Dispatch Serializer
+# ---------------------------------------------------------------------------
+
+class VehicleParkDispatchSerializer(serializers.ModelSerializer):
+    lr_bookings_at_stop = LRBokkingSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = VehicleParkDispatch
+        fields = [
+            'id', 'booking_memo', 'vehicle_no', 'driver_name',
+            'current_stop', 'next_stop', 'stop_sequence', 'status',
+            'parked_at', 'unloading_completed_at', 'dispatched_at',
+            'lr_bookings_at_stop', 'remark',
+            'created_by', 'created_at', 'updated_by', 'updated_at', 'is_active',
+        ]

@@ -7,6 +7,14 @@ from .views import (
     BrokerMasterRetrieveView,BrokerMasterRetrieveAllView,BrokerMasterRetrieveActiveAllView,BrokerMasterSoftDeleteAPIView,GenerateBrokerMasterPDF,TripMemoPendingPaymentView
 
 )
+from .views import (
+    VehicleParkDispatchInitiateView,
+    VehicleParkView,
+    VehicleUnloadingCompleteView,
+    VehicleDispatchView,
+    VehicleParkDispatchHistoryView,
+    VehicleParkDispatchRetrieveView,
+)
 
 urlpatterns = [
      path('collections/generateMemoNumber/', GenerateCollectionNumberView.as_view(), name='generate-memo-number'),
@@ -83,6 +91,22 @@ urlpatterns = [
      path('brokere-master/retrieve-all/', BrokerMasterRetrieveAllView.as_view(), name='broker_master-retrieve-all'),
      path('brokere-master/retrieve-active/', BrokerMasterRetrieveActiveAllView.as_view(), name='broker_master-retrieve-active'),
      path('brokere-master/soft-delete/', BrokerMasterSoftDeleteAPIView.as_view(), name='broker_master-soft-delete'),
+
+     # -----------------------------------------------------------------------
+     # Area 7 — Park-Dispatch Endpoints
+     # -----------------------------------------------------------------------
+     # Initiate the park-dispatch cycle for a trip (creates first IN_TRANSIT record)
+     path('park-dispatch/initiate/<int:booking_memo_id>/', VehicleParkDispatchInitiateView.as_view(), name='park-dispatch-initiate'),
+     # Mark vehicle as PARKED at current stop
+     path('park-dispatch/park/<int:booking_memo_id>/', VehicleParkView.as_view(), name='park-dispatch-park'),
+     # Mark unloading as complete at current stop
+     path('park-dispatch/unloading-done/<int:park_dispatch_id>/', VehicleUnloadingCompleteView.as_view(), name='park-dispatch-unloading-done'),
+     # Re-dispatch vehicle to next stop (creates next IN_TRANSIT record)
+     path('park-dispatch/dispatch/<int:park_dispatch_id>/', VehicleDispatchView.as_view(), name='park-dispatch-dispatch'),
+     # Read-only timeline of all stops for a trip
+     path('park-dispatch/history/<int:booking_memo_id>/', VehicleParkDispatchHistoryView.as_view(), name='park-dispatch-history'),
+     # Retrieve a single ParkDispatch record by id
+     path('park-dispatch/retrieve/', VehicleParkDispatchRetrieveView.as_view(), name='park-dispatch-retrieve'),
 
 ]
 
