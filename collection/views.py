@@ -4485,13 +4485,14 @@ from django.utils import timezone
 
 class VehicleParkView(APIView):
     """
-    POST  park-dispatch/park/<booking_memo_id>/
+    POST  park-dispatch/park/
 
     Mark a vehicle as PARKED at its current stop.
 
-    Expected request body (all optional overrides):
+    Expected request body:
         {
-            "remark": "..."         # optional
+            "booking_memo_id": <int>,   # required
+            "remark": "..."             # optional
         }
 
     The view:
@@ -4500,7 +4501,11 @@ class VehicleParkView(APIView):
       3. Returns the updated record with the LRs that should be unloaded here.
     """
 
-    def post(self, request, booking_memo_id, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
+        booking_memo_id = request.data.get('booking_memo_id')
+        if not booking_memo_id:
+            return Response({'status': 'error', 'message': 'booking_memo_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             booking_memo = BookingMemo.objects.get(id=booking_memo_id)
         except BookingMemo.DoesNotExist:
@@ -4544,13 +4549,23 @@ class VehicleParkView(APIView):
 
 class VehicleUnloadingCompleteView(APIView):
     """
-    POST  park-dispatch/unloading-done/<park_dispatch_id>/
+    POST  park-dispatch/unloading-done/
 
     Mark unloading as complete at the current stop.
     Transitions PARKED → UNLOADING (done).
+
+    Expected request body:
+        {
+            "park_dispatch_id": <int>,  # required
+            "remark": "..."             # optional
+        }
     """
 
-    def post(self, request, park_dispatch_id, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
+        park_dispatch_id = request.data.get('park_dispatch_id')
+        if not park_dispatch_id:
+            return Response({'status': 'error', 'message': 'park_dispatch_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             log = VehicleParkDispatch.objects.get(id=park_dispatch_id)
         except VehicleParkDispatch.DoesNotExist:
@@ -4580,7 +4595,7 @@ class VehicleUnloadingCompleteView(APIView):
 
 class VehicleDispatchView(APIView):
     """
-    POST  park-dispatch/dispatch/<park_dispatch_id>/
+    POST  park-dispatch/dispatch/
 
     Re-dispatch a vehicle from its current stop to the next stop.
 
@@ -4592,12 +4607,19 @@ class VehicleDispatchView(APIView):
       4. If there is no next stop, marks the BookingMemo as CLOSE and the
          current record as COMPLETED.
 
-    Expected request body (optional):
-        { "remark": "..." }
+    Expected request body:
+        {
+            "park_dispatch_id": <int>,  # required
+            "remark": "..."             # optional
+        }
     """
 
     @transaction.atomic
-    def post(self, request, park_dispatch_id, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
+        park_dispatch_id = request.data.get('park_dispatch_id')
+        if not park_dispatch_id:
+            return Response({'status': 'error', 'message': 'park_dispatch_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             log = VehicleParkDispatch.objects.select_related(
                 'booking_memo', 'booking_memo__vehicle_trip_route',
@@ -4700,7 +4722,7 @@ class VehicleDispatchView(APIView):
 
 class VehicleParkDispatchInitiateView(APIView):
     """
-    POST  park-dispatch/initiate/<booking_memo_id>/
+    POST  park-dispatch/initiate/
 
     Initiate the park-dispatch cycle for a booking memo that is starting its trip.
     Creates the first VehicleParkDispatch record (first stop, status=IN_TRANSIT).
@@ -4709,10 +4731,19 @@ class VehicleParkDispatchInitiateView(APIView):
     route attached to the BookingMemo.
 
     If no route is attached, uses the BookingMemo's to_branch as the single stop.
+
+    Expected request body:
+        {
+            "booking_memo_id": <int>   # required
+        }
     """
 
     @transaction.atomic
-    def post(self, request, booking_memo_id, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
+        booking_memo_id = request.data.get('booking_memo_id')
+        if not booking_memo_id:
+            return Response({'status': 'error', 'message': 'booking_memo_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             booking_memo = BookingMemo.objects.select_related(
                 'vehicle_trip_route', 'vehical_no', 'driver_name', 'to_branch'

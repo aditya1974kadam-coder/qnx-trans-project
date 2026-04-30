@@ -96,15 +96,15 @@ urlpatterns = [
      # Area 7 — Park-Dispatch Endpoints
      # -----------------------------------------------------------------------
      # Initiate the park-dispatch cycle for a trip (creates first IN_TRANSIT record)
-     path('park-dispatch/initiate/<int:booking_memo_id>/', VehicleParkDispatchInitiateView.as_view(), name='park-dispatch-initiate'),
+     path('park-dispatch/initiate/', VehicleParkDispatchInitiateView.as_view(), name='park-dispatch-initiate'),
      # Mark vehicle as PARKED at current stop
-     path('park-dispatch/park/<int:booking_memo_id>/', VehicleParkView.as_view(), name='park-dispatch-park'),
+     path('park-dispatch/park/', VehicleParkView.as_view(), name='park-dispatch-park'),
      # Mark unloading as complete at current stop
-     path('park-dispatch/unloading-done/<int:park_dispatch_id>/', VehicleUnloadingCompleteView.as_view(), name='park-dispatch-unloading-done'),
+     path('park-dispatch/unloading-done/', VehicleUnloadingCompleteView.as_view(), name='park-dispatch-unloading-done'),
      # Re-dispatch vehicle to next stop (creates next IN_TRANSIT record)
-     path('park-dispatch/dispatch/<int:park_dispatch_id>/', VehicleDispatchView.as_view(), name='park-dispatch-dispatch'),
+     path('park-dispatch/dispatch/', VehicleDispatchView.as_view(), name='park-dispatch-dispatch'),
      # Read-only timeline of all stops for a trip
-     path('park-dispatch/history/<int:booking_memo_id>/', VehicleParkDispatchHistoryView.as_view(), name='park-dispatch-history'),
+     path('park-dispatch/history/', VehicleParkDispatchHistoryView.as_view(), name='park-dispatch-history'),
      # Retrieve a single ParkDispatch record by id
      path('park-dispatch/retrieve/', VehicleParkDispatchRetrieveView.as_view(), name='park-dispatch-retrieve'),
 
