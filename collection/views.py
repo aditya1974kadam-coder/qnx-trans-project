@@ -4601,7 +4601,7 @@ class VehicleDispatchView(APIView):
         try:
             log = VehicleParkDispatch.objects.select_related(
                 'booking_memo', 'booking_memo__vehicle_trip_route',
-                'current_stop', 'next_stop', 'vehicle_no', 'driver_name'
+                'current_stop', 'next_stop',
             ).get(id=park_dispatch_id)
         except VehicleParkDispatch.DoesNotExist:
             return Response({'status': 'error', 'message': 'ParkDispatch record not found'},
