@@ -4,8 +4,8 @@ from .views import TripModeCreateView,TripModeRetrieveView,TripModeRetrieveAllVi
 from .views import (
     VehicalHireContractCreateView,VehicalHireContractRetrieveView,VehicalHireContractRetrieveAllView,VehicalHireContractRetrieveActiveView,VehicalHireContractUpdateAPIView,VehicalHireContractSoftDeleteAPIView,VehicalHireContractPermanentDeleteAPIView,GetVehicleHireContracts,GetVehicleHireContractByvehicalType,GenerateBookingMemoPDF,GenerateTripMemoPDF,BookingMemoLrslistRetrieveView,BookingMemoRetrieveTURView,
     CollectionFilterView,BookingMemoFilterView,TripMemoFilterView,BookingMemoPendingForTripMemoView,BookingMemoPendingForTURView,BrokerMasterCreateView,BrokerMasterUpdateView,
-    BrokerMasterRetrieveView,BrokerMasterRetrieveAllView,BrokerMasterRetrieveActiveAllView,BrokerMasterSoftDeleteAPIView,GenerateBrokerMasterPDF,TripMemoPendingPaymentView
-
+    BrokerMasterRetrieveView,BrokerMasterRetrieveAllView,BrokerMasterRetrieveActiveAllView,BrokerMasterSoftDeleteAPIView,GenerateBrokerMasterPDF,TripMemoPendingPaymentView, 
+    VehicleParkDispatchInitiateView, VehicleParkView, VehicleUnloadingCompleteView, VehicleDispatchView, VehicleParkDispatchHistoryView, VehicleParkDispatchRetrieveView,
 )
 
 urlpatterns = [
@@ -83,6 +83,23 @@ urlpatterns = [
      path('brokere-master/retrieve-all/', BrokerMasterRetrieveAllView.as_view(), name='broker_master-retrieve-all'),
      path('brokere-master/retrieve-active/', BrokerMasterRetrieveActiveAllView.as_view(), name='broker_master-retrieve-active'),
      path('brokere-master/soft-delete/', BrokerMasterSoftDeleteAPIView.as_view(), name='broker_master-soft-delete'),
+     
+    # -----------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Initiate the park-dispatch cycle for a trip (creates first IN_TRANSIT record)
+    # Area 7 — Park-Dispatch Endpoints
+    path('park-dispatch/initiate/', VehicleParkDispatchInitiateView.as_view(), name='park-dispatch-initiate'),
+    # Mark vehicle as PARKED at current stop
+    path('park-dispatch/park/', VehicleParkView.as_view(), name='park-dispatch-park'),
+    # Mark unloading as complete at current stop
+    path('park-dispatch/unloading-done/', VehicleUnloadingCompleteView.as_view(), name='park-dispatch-unloading-done'),
+    # Re-dispatch vehicle to next stop (creates next IN_TRANSIT record)
+    path('park-dispatch/dispatch/', VehicleDispatchView.as_view(), name='park-dispatch-dispatch'),
+    # Read-only timeline of all stops for a trip
+    path('park-dispatch/history/', VehicleParkDispatchHistoryView.as_view(), name='park-dispatch-history'),
+    # Retrieve a single ParkDispatch record by id
+    path('park-dispatch/retrieve/', VehicleParkDispatchRetrieveView.as_view(), name='park-dispatch-retrieve'),
+
 
 ]
 

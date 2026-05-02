@@ -13,7 +13,7 @@ class RouteStationsSerializer(serializers.ModelSerializer):
     class Meta:
         model = RouteStations
         fields = [
-            'id','route_station', 'km', 
+            'id', 'route_station', 'km', 'sequence_order', 'stop_type', 
             'created_by', 'created_at', 'updated_by', 'updated_at', 
             'is_active', 'flag'
         ]

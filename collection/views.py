@@ -3262,8 +3262,6 @@ class TripMemoCreateView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         # Validate booking memos
-
-        # Validate booking memos
         invalid_memos = []
         for item in booking_memos_data:
             booking_memo_id = item.get('booking_memo')
@@ -4471,3 +4469,333 @@ class BrokerMasterSoftDeleteAPIView(APIView):
                 'status': 'error',
                 'data': {}
             }, status=status.HTTP_404_NOT_FOUND)
+
+
+# ===========================================================================
+# Area 3 & 4 — Park-Dispatch Views
+# ===========================================================================
+from .models import VehicleParkDispatch
+from .serializers import VehicleParkDispatchSerializer
+from routes.models import RouteMaster, RouteStations
+from django.utils import timezone
+class VehicleParkView(APIView):
+    """
+    POST  park-dispatch/park/
+    Mark a vehicle as PARKED at its current stop.
+    Expected request body :
+        {
+            "booking_memo_id": <int>,   # required
+            "remark": "..."             # optional
+        }
+    The view:
+      1. Finds the latest IN_TRANSIT VehicleParkDispatch record for this memo.
+      2. Sets status → PARKED and stamps parked_at.
+      3. Returns the updated record with the LRs that should be unloaded here.
+    """
+    def post(self, request, *args, **kwargs):
+        booking_memo_id = request.data.get('booking_memo_id')
+        if not booking_memo_id:
+            return Response({'status': 'error', 'message': 'booking_memo_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            booking_memo = BookingMemo.objects.get(id=booking_memo_id)
+        except BookingMemo.DoesNotExist:
+            return Response({'status': 'error', 'message': 'BookingMemo not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        if booking_memo.memo_mode != 'OPEN':
+            return Response(
+                {'status': 'error', 'message': 'This trip is already closed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Find the most recent IN_TRANSIT log for this memo
+        log = (
+            VehicleParkDispatch.objects
+            .filter(booking_memo=booking_memo, status=VehicleParkDispatch.STATUS_IN_TRANSIT)
+            .order_by('-stop_sequence')
+            .first()
+        )
+        if not log:
+            return Response(
+                {'status': 'error',
+                 'message': 'No in-transit record found for this booking memo. '
+                            'Use the initiate-trip endpoint first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        log.status = VehicleParkDispatch.STATUS_PARKED
+        log.parked_at = timezone.now()
+        if request.data.get('remark'):
+            log.remark = request.data['remark']
+        log.updated_by = request.user
+        log.save()
+        serializer = VehicleParkDispatchSerializer(log)
+        return Response(
+            {'status': 'success', 'message': 'Vehicle marked as PARKED.', 'data': serializer.data},
+            status=status.HTTP_200_OK
+        )
+class VehicleUnloadingCompleteView(APIView):
+    """
+    POST  park-dispatch/unloading-done/
+    Mark unloading as complete at the current stop.
+    Transitions PARKED → UNLOADING (done).
+    Expected request body:
+        {
+            "park_dispatch_id": <int>,  # required
+            "remark": "..."             # optional
+        }
+    """
+    def post(self, request, *args, **kwargs):
+        park_dispatch_id = request.data.get('park_dispatch_id')
+        if not park_dispatch_id:
+            return Response({'status': 'error', 'message': 'park_dispatch_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            log = VehicleParkDispatch.objects.get(id=park_dispatch_id)
+        except VehicleParkDispatch.DoesNotExist:
+            return Response({'status': 'error', 'message': 'ParkDispatch record not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        if log.status not in (VehicleParkDispatch.STATUS_PARKED,):
+            return Response(
+                {'status': 'error',
+                'message': f'Cannot mark unloading complete when status is {log.status}.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        log.status = VehicleParkDispatch.STATUS_UNLOADING
+        log.unloading_completed_at = timezone.now()
+        if request.data.get('remark'):
+            log.remark = request.data['remark']
+        log.updated_by = request.user
+        log.save()
+        serializer = VehicleParkDispatchSerializer(log)
+        return Response(
+            {'status': 'success', 'message': 'Unloading marked complete.', 'data': serializer.data},
+            status=status.HTTP_200_OK
+        )
+class VehicleDispatchView(APIView):
+    """
+    POST  park-dispatch/dispatch/
+    Re-dispatch a vehicle from its current stop to the next stop.
+    Logic:
+      1. Validates the current record is PARKED or UNLOADING (done).
+      2. Looks up RouteMaster attached to the booking memo to find next stop
+         (ordered by sequence_order, first station with sequence > current).
+      3. Creates a new VehicleParkDispatch record for the next stop (IN_TRANSIT).
+      4. If there is no next stop, marks the BookingMemo as CLOSE and the
+         current record as COMPLETED.
+    Expected request body (optional):
+        { 
+        "park_dispatch_id": <int>,  # required
+        "remark": "..."   #optional}
+    """
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        park_dispatch_id = request.data.get('park_dispatch_id')
+        if not park_dispatch_id:
+            return Response({'status': 'error', 'message': 'park_dispatch_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            log = VehicleParkDispatch.objects.select_related(
+                'booking_memo', 'booking_memo__vehicle_trip_route',
+                'current_stop', 'next_stop', 'vehicle_no', 'driver_name',
+            ).get(id=park_dispatch_id)
+        except VehicleParkDispatch.DoesNotExist:
+            return Response({'status': 'error', 'message': 'ParkDispatch record not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        allowed_statuses = (
+            VehicleParkDispatch.STATUS_PARKED,
+            VehicleParkDispatch.STATUS_UNLOADING,
+        )
+        if log.status not in allowed_statuses:
+            return Response(
+                {'status': 'error',
+                 'message': f'Cannot dispatch when status is {log.status}. '
+                            f'Vehicle must be PARKED or have completed UNLOADING.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        booking_memo = log.booking_memo
+        route = booking_memo.vehicle_trip_route  # RouteMaster FK on BookingMemo
+        # Determine next stop from route stations
+        next_station = None
+        if route:
+            next_station = (
+                route.route_stations
+                .filter(sequence_order__gt=log.stop_sequence, is_active=True)
+                .order_by('sequence_order')
+                .first()
+            )
+        # Mark current log as DISPATCHED
+        log.status = VehicleParkDispatch.STATUS_DISPATCHED
+        log.dispatched_at = timezone.now()
+        if request.data.get('remark'):
+            log.remark = request.data['remark']
+        log.updated_by = request.user
+        log.save()
+        if next_station is None:
+            # No more stops — trip is complete
+            log.status = VehicleParkDispatch.STATUS_COMPLETED
+            log.save()
+            booking_memo.memo_mode = 'CLOSE'
+            booking_memo.updated_by = request.user
+            booking_memo.save()
+            serializer = VehicleParkDispatchSerializer(log)
+            return Response(
+                {'status': 'success',
+                 'message': 'All stops completed. Trip is now CLOSED.',
+                 'data': serializer.data},
+                status=status.HTTP_200_OK
+            )
+        # Determine the stop after next_station (for next_stop reference)
+        after_next = None
+        if route:
+            after_next = (
+                route.route_stations
+                .filter(sequence_order__gt=next_station.sequence_order, is_active=True)
+                .order_by('sequence_order')
+                .first()
+            )
+        # Build LR list for the next stop: BookingMemoLRs with drop_at_branch = next_station.route_station
+        next_stop_branch = next_station.route_station
+        lr_ids_for_next_stop = list(
+            booking_memo.lr_list
+            .filter(drop_at_branch=next_stop_branch, is_active=True)
+            .values_list('lr_booking_id', flat=True)
+        )
+        # Create the next leg
+        next_log = VehicleParkDispatch.objects.create(
+            booking_memo=booking_memo,
+            vehicle_no=log.vehicle_no,
+            driver_name=log.driver_name,
+            current_stop=next_stop_branch,
+            next_stop=after_next.route_station if after_next else None,
+            stop_sequence=next_station.sequence_order,
+            status=VehicleParkDispatch.STATUS_IN_TRANSIT,
+            created_by=request.user,
+        )
+        if lr_ids_for_next_stop:
+            next_log.lr_bookings_at_stop.set(lr_ids_for_next_stop)
+        serializer = VehicleParkDispatchSerializer(next_log)
+        return Response(
+            {'status': 'success',
+             'message': f'Vehicle dispatched to next stop: {next_stop_branch}.',
+             'data': serializer.data},
+            status=status.HTTP_201_CREATED
+        )
+class VehicleParkDispatchInitiateView(APIView):
+    """
+    POST  park-dispatch/initiate/
+    Initiate the park-dispatch cycle for a booking memo that is starting its trip.
+    Creates the first VehicleParkDispatch record (first stop, status=IN_TRANSIT).
+    The first stop is the first RouteStation (lowest sequence_order) on the
+    route attached to the BookingMemo.
+    If no route is attached, uses the BookingMemo's to_branch as the single stop.
+    Expected request body:
+        {
+            "booking_memo_id": <int>   # required
+        }
+    """
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        booking_memo_id = request.data.get('booking_memo_id')
+        if not booking_memo_id:
+            return Response({'status': 'error', 'message': 'booking_memo_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            booking_memo = BookingMemo.objects.select_related(
+                'vehicle_trip_route', 'vehical_no', 'driver_name', 'to_branch'
+            ).get(id=booking_memo_id)
+        except BookingMemo.DoesNotExist:
+            return Response({'status': 'error', 'message': 'BookingMemo not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        if booking_memo.memo_mode != 'OPEN':
+            return Response(
+                {'status': 'error', 'message': 'This trip is already closed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Prevent duplicate initiation
+        if VehicleParkDispatch.objects.filter(booking_memo=booking_memo).exists():
+            return Response(
+                {'status': 'error', 'message': 'Park-dispatch cycle already initiated for this trip.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        route = booking_memo.vehicle_trip_route
+        first_station = None
+        second_station = None
+        first_stop_branch = None
+        if route:
+            stations = list(
+                route.route_stations.filter(is_active=True).order_by('sequence_order')
+            )
+            if stations:
+                first_station = stations[0]
+                first_stop_branch = first_station.route_station
+                second_station = stations[1] if len(stations) > 1 else None
+        if first_stop_branch is None:
+            # Fall back to BookingMemo to_branch
+            first_stop_branch = booking_memo.to_branch
+        # Gather LRs for the first stop
+        lr_ids_for_first_stop = []
+        if first_stop_branch:
+            lr_ids_for_first_stop = list(
+                booking_memo.lr_list
+                .filter(drop_at_branch=first_stop_branch, is_active=True)
+                .values_list('lr_booking_id', flat=True)
+            )
+        log = VehicleParkDispatch.objects.create(
+            booking_memo=booking_memo,
+            vehicle_no=booking_memo.vehical_no,
+            driver_name=booking_memo.driver_name,
+            current_stop=first_stop_branch,
+            next_stop=second_station.route_station if second_station else None,
+            stop_sequence=first_station.sequence_order if first_station else 1,
+            status=VehicleParkDispatch.STATUS_IN_TRANSIT,
+            created_by=request.user,
+        )
+        if lr_ids_for_first_stop:
+            log.lr_bookings_at_stop.set(lr_ids_for_first_stop)
+        serializer = VehicleParkDispatchSerializer(log)
+        return Response(
+            {'status': 'success',
+             'message': 'Park-dispatch cycle initiated. Vehicle is IN_TRANSIT to first stop.',
+             'data': serializer.data},
+            status=status.HTTP_201_CREATED
+        )
+class VehicleParkDispatchHistoryView(APIView):
+    """
+    POST  park-dispatch/history/
+    Returns the full ordered park-dispatch log for a trip (read-only timeline).
+    """
+    def post(self, request, *args, **kwargs):
+        booking_memo_id = request.data.get('booking_memo_id')
+        if not booking_memo_id:
+            return Response({'status': 'error', 'message': 'booking_memo_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            booking_memo = BookingMemo.objects.get(id=booking_memo_id)
+        except BookingMemo.DoesNotExist:
+            return Response({'status': 'error', 'message': 'BookingMemo not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        logs = VehicleParkDispatch.objects.filter(
+            booking_memo=booking_memo
+        ).order_by('stop_sequence', 'created_at')
+        serializer = VehicleParkDispatchSerializer(logs, many=True)
+        return Response(
+            {'status': 'success', 'data': serializer.data},
+            status=status.HTTP_200_OK
+        )
+class VehicleParkDispatchRetrieveView(APIView):
+    """
+    POST  park-dispatch/retrieve/
+    Retrieve a single VehicleParkDispatch record by id.
+    Body: { "id": <int> }
+    """
+    def post(self, request, *args, **kwargs):
+        record_id = request.data.get('id')
+        if not record_id:
+            return Response({'status': 'error', 'message': 'id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            log = VehicleParkDispatch.objects.get(id=record_id)
+        except VehicleParkDispatch.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Record not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        serializer = VehicleParkDispatchSerializer(log)
+        return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)

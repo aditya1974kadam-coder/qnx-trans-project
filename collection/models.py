@@ -73,7 +73,12 @@ class BookingMemoLRs(models.Model):
     del_point = models.ForeignKey(
         DeliveryTypes, related_name='booking_memo_lr_delivery_type', on_delete=models.SET_NULL, null=True)
     lr_remarks = models.CharField(max_length=100, blank=True, null=True)
-
+    # Indicates at which intermediate branch this LR should be unloaded (for part-load trips)
+    drop_at_branch = models.ForeignKey(
+        BranchMaster, related_name='booking_memo_lr_drop_branch',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Branch/stop where this LR cargo should be unloaded (leave blank for final destination)"
+    )
     created_by = models.ForeignKey(
         User, on_delete=models.SET_DEFAULT, related_name='booking_memo_lr_created_by', default=1)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -349,4 +354,97 @@ class BrokerMaster(models.Model):
     def __str__(self):
         return f"{self.owner} - Reports"
 
+# ---------------------------------------------------------------------------
+# Park-Dispatch: tracks the intermediate stop cycle of a part-load vehicle
+# ---------------------------------------------------------------------------
+class VehicleParkDispatch(models.Model):
+    """
+    Records every leg of a part-load vehicle trip.
+    The lifecycle per stop:
+    IN_TRANSIT → PARKED → UNLOADING → DISPATCHED (→ IN_TRANSIT for next stop)
+    The last stop ends with status COMPLETED.
+    """
+    STATUS_IN_TRANSIT = 'IN_TRANSIT'
+    STATUS_PARKED = 'PARKED'
+    STATUS_UNLOADING = 'UNLOADING'
+    STATUS_DISPATCHED = 'DISPATCHED'
+    STATUS_COMPLETED = 'COMPLETED'
+    STATUS_CHOICES = [
+        (STATUS_IN_TRANSIT, 'In Transit'),
+        (STATUS_PARKED, 'Parked'),
+        (STATUS_UNLOADING, 'Unloading'),
+        (STATUS_DISPATCHED, 'Dispatched'),
+        (STATUS_COMPLETED, 'Completed'),
+    ]
+    booking_memo = models.ForeignKey(
+        BookingMemo, on_delete=models.CASCADE,
+        related_name='park_dispatch_logs',
+        help_text="The booking memo / trip this stop log belongs to"
+    )
+    vehicle_no = models.ForeignKey(
+        'vehicals.VehicalMaster', on_delete=models.SET_NULL, null=True,
+        related_name='park_dispatch_vehicle',
+        help_text="Vehicle on this trip"
+    )
+    driver_name = models.ForeignKey(
+        'vehicals.DriverMaster', on_delete=models.SET_NULL, null=True,
+        related_name='park_dispatch_driver',
+        help_text="Driver on this trip"
+    )
+    current_stop = models.ForeignKey(
+        BranchMaster, on_delete=models.SET_NULL, null=True,
+        related_name='park_dispatch_current_stop',
+        help_text="The branch/stop where the vehicle currently is (or is heading to)"
+    )
+    next_stop = models.ForeignKey(
+        BranchMaster, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='park_dispatch_next_stop',
+        help_text="The next planned stop after current_stop (null when this is the final stop)"
+    )
+    stop_sequence = models.PositiveIntegerField(
+        default=1,
+        help_text="1-based sequence number of this stop within the route"
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_IN_TRANSIT,
+        help_text="Current status of the vehicle at this stop"
+    )
+    parked_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp when vehicle was marked as PARKED (arrived at this stop)"
+    )
+    unloading_completed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp when cargo unloading was marked complete at this stop"
+    )
+    dispatched_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp when vehicle was re-dispatched towards the next stop"
+    )
+    # LRs that must be unloaded at this specific stop
+    lr_bookings_at_stop = models.ManyToManyField(
+        'lr_booking.LR_Bokking',
+        related_name='park_dispatch_lr_stops',
+        blank=True,
+        help_text="LR bookings to be unloaded at this stop"
+    )
+    remark = models.CharField(max_length=255, blank=True, null=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_DEFAULT, default=1, related_name='vpd_created_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='vpd_updated_by'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    flag = models.BooleanField(default=True)
+    class Meta:
+        db_table = 'vehicle_park_dispatch'
+        ordering = ['booking_memo', 'stop_sequence']
+    def __str__(self):
+        return (
+            f"ParkDispatch: {self.booking_memo} | "
+            f"Stop {self.stop_sequence} – {self.current_stop} | {self.status}"
+        )
 

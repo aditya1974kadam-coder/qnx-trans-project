@@ -58,6 +58,8 @@ class RouteMasterCreateView(APIView):
                         new_station = RouteStations.objects.create(                            
                             route_station=BranchMaster.objects.get(pk=item['route_station']) if item.get('route_station') else None,
                             km=item.get('km', 0),
+                            sequence_order=item.get('sequence_order', 1),
+                            stop_type=item.get('stop_type', RouteStations.STOP_TYPE_INTERMEDIATE),
                             created_by=request.user,
                         )
                         route_stations_to_add.append(new_station)
