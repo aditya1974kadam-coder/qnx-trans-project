@@ -4816,12 +4816,19 @@ class VehicleParkDispatchInitiateView(APIView):
 
 class VehicleParkDispatchHistoryView(APIView):
     """
-    GET  park-dispatch/history/<booking_memo_id>/
+    GET  park-dispatch/history/
 
     Returns the full ordered park-dispatch log for a trip (read-only timeline).
+
+    Query params:
+        booking_memo_id=<int>   # required
     """
 
-    def get(self, request, booking_memo_id, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
+        booking_memo_id = request.query_params.get('booking_memo_id')
+        if not booking_memo_id:
+            return Response({'status': 'error', 'message': 'booking_memo_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             booking_memo = BookingMemo.objects.get(id=booking_memo_id)
         except BookingMemo.DoesNotExist:
